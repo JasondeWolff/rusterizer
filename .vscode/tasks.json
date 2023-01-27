@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cargo build",
+            "dependsOn": [
+                "cargo build rusterizer",
+            ]
+        },
+        {
+            "label": "cargo build release",
+            "dependsOn": [
+                "cargo build rusterizer release",
+            ]
+        },
+
+        {
+            "label": "cargo build rusterizer",
+            "type": "cargo",
+            "command": "build",
+            "args": [
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/rusterizer/"
+            },
+        },
+        {
+            "label": "cargo build rusterizer release",
+            "type": "cargo",
+            "command": "build",
+            "args": [
+                "--release",
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/rusterizer/"
+            },
+        }
+    ]
+}

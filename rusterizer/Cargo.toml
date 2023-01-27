@@ -1,0 +1,36 @@
+[package]
+name = "rusterizer"
+authors = ["Jason de Wolff"]
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+minifb = "0.23.0"
+rand = "0.3.*"
+num  = "0.1.*"
+bitmask-enum = "2.1.0"
+stb_image = "0.2.4"
+gltf = "1.0.0"
+glam = "0.22.0"
+
+[profile.dev]                           # Modify profile settings via config.
+opt-level = 0                           # Optimization level.
+debug = true                            # Include debug info.
+debug-assertions = true                 # Enables debug assertions.
+overflow-checks = true                  # Enables runtime integer overflow checks.
+lto = false                             # Sets link-time optimization.
+panic = 'unwind'                        # The panic strategy.
+incremental = true                      # Incremental compilation.
+codegen-units = 16                      # Number of code generation units.
+rpath = false                           # Sets the rpath linking option.
+
+[profile.release]                       # Modify profile settings via config.
+opt-level = 3                           # Optimization level.
+debug = false                           # Include debug info.
+debug-assertions = false                # Enables debug assertions.
+overflow-checks = false                 # Enables runtime integer overflow checks.
+lto = true                              # Sets link-time optimization.
+panic = 'abort'                         # The panic strategy.
+incremental = true                      # Incremental compilation.
+codegen-units = 1                       # Number of code generation units.
+rpath = false                           # Sets the rpath linking option.

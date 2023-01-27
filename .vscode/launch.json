@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/rusterizer/target/debug/rusterizer.exe",
+            "args": [
+            ],
+            "cwd": "${workspaceFolder}/rusterizer",
+            "preLaunchTask": "cargo build"
+        },
+        {
+            "name": "Release",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/rusterizer/target/release/rusterizer.exe",
+            "args": [
+            ],
+            "cwd": "${workspaceFolder}/rusterizer",
+            "preLaunchTask": "cargo build release"
+        }
+    ]
+}
