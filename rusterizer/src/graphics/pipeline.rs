@@ -1,6 +1,8 @@
 use crate::glam::*;
 use crate::window::FrameBuffer;
 use crate::resources::Vertex;
+use crate::resources::Material;
+use crate::graphics::{Shader, ShaderIn};
 
 fn from_vec3_rgb(rgb: &Vec3) -> u32 {
     from_u8_rgb((rgb.x * 255.99) as u8, (rgb.y * 255.99) as u8, (rgb.z * 255.99) as u8)
@@ -45,7 +47,7 @@ impl Pipeline {
         self.depth_buffer.clear(u32::MAX);
     }
 
-    pub fn draw_vertices(&mut self, frame_buffer: &mut FrameBuffer, vertices: &Vec<Vertex>) {
+    pub fn draw_vertices(&mut self, shader: &dyn Shader, material: &Material, frame_buffer: &mut FrameBuffer, vertices: &Vec<Vertex>) {
         self.adapt_depth_buffer(&frame_buffer);
 
         let mvp =  self.proj_matrix * self.view_matrix * self.model_matrix;
@@ -60,11 +62,11 @@ impl Pipeline {
             let b = Self::project(&v1.position, &mvp);
             let c = Self::project(&v2.position, &mvp);
 
-            Self::draw_triangle(frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2);
+            Self::draw_triangle(shader, material, frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2, &self.model_matrix);
         }
     }
 
-    pub fn draw_vertices_indexed(&mut self, frame_buffer: &mut FrameBuffer, vertices: &Vec<Vertex>, indices: &Vec<u32>) {
+    pub fn draw_vertices_indexed(&mut self, shader: &dyn Shader, material: &Material, frame_buffer: &mut FrameBuffer, vertices: &Vec<Vertex>, indices: &Vec<u32>) {
         self.adapt_depth_buffer(&frame_buffer);
 
         let mvp =  self.proj_matrix * self.view_matrix * self.model_matrix;
@@ -79,7 +81,7 @@ impl Pipeline {
             let b = Self::project(&v1.position, &mvp);
             let c = Self::project(&v2.position, &mvp);
 
-            Self::draw_triangle(frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2);
+            Self::draw_triangle(shader, material, frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2, &self.model_matrix);
         }
     }
 
@@ -93,7 +95,15 @@ impl Pipeline {
         }
     }
 
-    fn draw_triangle(frame_buffer: &mut FrameBuffer, depth_buffer: &mut FrameBuffer, a: &Vec3, b: &Vec3, c: &Vec3, v0: &Vertex, v1: &Vertex, v2: &Vertex) {
+    fn draw_triangle(shader: &dyn Shader, material: &Material, frame_buffer: &mut FrameBuffer, depth_buffer: &mut FrameBuffer, a: &(Vec3, f32), b: &(Vec3, f32), c: &(Vec3, f32), v0: &Vertex, v1: &Vertex, v2: &Vertex, model_matrix: &Mat4) {
+        let rec0 = a.1;
+        let rec1 = b.1;
+        let rec2 = c.1;
+        
+        let a = &a.0;
+        let b = &b.0;
+        let c = &c.0;
+
         let z0 = a.z;
         let z1 = b.z;
         let z2 = c.z;
@@ -131,14 +141,26 @@ impl Pipeline {
                     if z < d {
                         depth_buffer.set_pixel_f32(x, y, z);
 
-                        let uv = v0.tex_coord * bary.x + v1.tex_coord * bary.y + v2.tex_coord * bary.z;
-                        let normal = v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z;
+                        // model space -> world space
+                        let mv0 = *model_matrix * Vec4::from((v0.position, 1.0)); // MUL WITH REC??
+                        let mv1 = *model_matrix * Vec4::from((v1.position, 1.0));
+                        let mv2 = *model_matrix * Vec4::from((v2.position, 1.0));
 
-                        // let mut color = Vec3::new(a0, a1, a2);
-                        // color *= 1.0 / color.length();
+                        let correction = 1.0 / (bary.x * rec0 + bary.y * rec1 + bary.z * rec2);
 
-                        let color = normal * 0.5 + 0.5;
+                        let position = mv0 * bary.x + mv1 * bary.y + mv2 * bary.z;
+                        let normal = v0.normal * rec0 * bary.x + v1.normal * rec1 * bary.y + v2.normal * rec2 * bary.z;
+                        let tex_coord = v0.tex_coord * rec0 * bary.x + v1.tex_coord * rec1 * bary.y + v2.tex_coord * rec2 * bary.z;
+                        //let tex_coord = v0.tex_coord * bary.x + v1.tex_coord * bary.y + v2.tex_coord * bary.z;
 
+                        let shader_in = ShaderIn {
+                            position: Vec3::new(position.x, position.y, position.z) * correction,
+                            normal: normal * correction,
+                            tex_coord: tex_coord * correction
+                        };
+
+                        let color = shader.shade(material, &shader_in);
+                        let color = Vec3::new(color.x, color.y, color.z);
                         frame_buffer.set_pixel(x, y, from_vec3_rgb(&color));
                     }
                 }
@@ -146,11 +168,25 @@ impl Pipeline {
         }
     }
 
-    fn project(p: &Vec3, mvp: &Mat4) -> Vec3 {
+    fn barycentric_coordinates(point: &Vec2, v0: &Vec2, v1: &Vec2, v2: &Vec2, area: f32) -> Option<Vec3> {
+        let a = 1.0 / area;
+    
+        let m0 = Self::edge_function(point, v1, v2) * a;
+        let m1 = Self::edge_function(point, v2, v0) * a;
+        let m2 = 1.0 - m0 - m1;
+    
+        if m0 >= 0.0 && m1 >= 0.0 && m2 >= 0.0 {
+            Some(glam::vec3(m0, m1, m2))
+        } else {
+            None
+        }
+    }
+
+    fn project(p: &Vec3, mvp: &Mat4) -> (Vec3, f32) {
         let proj_pos = *mvp * Vec4::from((*p, 1.0));
         let rec = 1.0 / proj_pos.w;
         let rec_pos = proj_pos * rec;
-        Vec3::new(rec_pos.x, rec_pos.y, rec_pos.z)
+        (Vec3::new(rec_pos.x, rec_pos.y, rec_pos.z), rec)
     }
 
     fn edge_function(a: &Vec2, c: &Vec2, b: &Vec2) -> f32 {
