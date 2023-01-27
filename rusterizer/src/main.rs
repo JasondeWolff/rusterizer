@@ -39,7 +39,7 @@ fn main() {
         delta_timer.reset();
         println!("ms: {}", delta_time * 1000.0);
 
-        let speed = 1.0;
+        let speed = 10.0;
         if window.get_key(Key::A) {
             cam_position += Vec3::X * delta_time * speed;
         }

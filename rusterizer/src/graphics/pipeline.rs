@@ -51,6 +51,7 @@ impl Pipeline {
         self.adapt_depth_buffer(&frame_buffer);
 
         let mvp =  self.proj_matrix * self.view_matrix * self.model_matrix;
+        let inv_trans_model_matrix = self.model_matrix.inverse().transpose();
 
         let triangle_count = vertices.len() / 3;
         for i in 0..triangle_count {
@@ -62,7 +63,7 @@ impl Pipeline {
             let b = Self::project(&v1.position, &mvp);
             let c = Self::project(&v2.position, &mvp);
 
-            Self::draw_triangle(shader, material, frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2, &self.model_matrix);
+            Self::draw_triangle(shader, material, frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2, &self.model_matrix, &inv_trans_model_matrix);
         }
     }
 
@@ -70,6 +71,7 @@ impl Pipeline {
         self.adapt_depth_buffer(&frame_buffer);
 
         let mvp =  self.proj_matrix * self.view_matrix * self.model_matrix;
+        let inv_trans_model_matrix = self.model_matrix.inverse().transpose();
 
         let triangle_count = indices.len() / 3;
         for i in 0..triangle_count {
@@ -81,7 +83,7 @@ impl Pipeline {
             let b = Self::project(&v1.position, &mvp);
             let c = Self::project(&v2.position, &mvp);
 
-            Self::draw_triangle(shader, material, frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2, &self.model_matrix);
+            Self::draw_triangle(shader, material, frame_buffer, &mut self.depth_buffer, &a, &b, &c, v0, v1, v2, &self.model_matrix, &inv_trans_model_matrix);
         }
     }
 
@@ -95,7 +97,7 @@ impl Pipeline {
         }
     }
 
-    fn draw_triangle(shader: &dyn Shader, material: &Material, frame_buffer: &mut FrameBuffer, depth_buffer: &mut FrameBuffer, a: &(Vec3, f32), b: &(Vec3, f32), c: &(Vec3, f32), v0: &Vertex, v1: &Vertex, v2: &Vertex, model_matrix: &Mat4) {
+    fn draw_triangle(shader: &dyn Shader, material: &Material, frame_buffer: &mut FrameBuffer, depth_buffer: &mut FrameBuffer, a: &(Vec3, f32), b: &(Vec3, f32), c: &(Vec3, f32), v0: &Vertex, v1: &Vertex, v2: &Vertex, model_matrix: &Mat4, inv_trans_model_matrix: &Mat4) {
         let rec0 = a.1;
         let rec1 = b.1;
         let rec2 = c.1;
@@ -113,10 +115,10 @@ impl Pipeline {
         let c = Self::clip_to_screen_space(Vec2::new(c.x, c.y), Vec2::new(frame_buffer.width() as f32, frame_buffer.height() as f32));
 
         let min = a.min(b.min(c)).max(Vec2::new(0.0, 0.0));
-        let max = a.max(b.max(c)).min(Vec2::new(frame_buffer.width() as f32, frame_buffer.height() as f32));
+        let max = (a.max(b.max(c)) + 1.0).min(Vec2::new(frame_buffer.width() as f32, frame_buffer.height() as f32));
 
-        for x in (min.x as usize)..=(max.x as usize) {
-            for y in (min.y as usize)..=(max.y as usize) {
+        for x in (min.x as usize)..(max.x as usize) {
+            for y in (min.y as usize)..(max.y as usize) {
                 let p = Vec2::new(x as f32, y as f32) + 0.5;
 
                 let a0 = Self::edge_function(&b, &c, &p);
@@ -141,20 +143,24 @@ impl Pipeline {
                     if z < d {
                         depth_buffer.set_pixel_f32(x, y, z);
 
-                        // model space -> world space
                         let mv0 = *model_matrix * Vec4::from((v0.position * rec0, 1.0));
                         let mv1 = *model_matrix * Vec4::from((v1.position * rec1, 1.0));
                         let mv2 = *model_matrix * Vec4::from((v2.position * rec2, 1.0));
 
+                        let n0 = *inv_trans_model_matrix * Vec4::from((v0.normal, 1.0));
+                        let n1 = *inv_trans_model_matrix * Vec4::from((v1.normal, 1.0));
+                        let n2 = *inv_trans_model_matrix * Vec4::from((v2.normal, 1.0));
+
                         let correction = 1.0 / (bary.x * rec0 + bary.y * rec1 + bary.z * rec2);
 
                         let position = mv0 * bary.x + mv1 * bary.y + mv2 * bary.z;
-                        let normal = v0.normal * rec0 * bary.x + v1.normal * rec1 * bary.y + v2.normal * rec2 * bary.z;
+                        // let normal = v0.normal * rec0 * bary.x + v1.normal * rec1 * bary.y + v2.normal * rec2 * bary.z;
+                        let normal = n0 * rec0 * bary.x + n1 * rec1 * bary.y + n2 * rec2 * bary.z;
                         let tex_coord = v0.tex_coord * rec0 * bary.x + v1.tex_coord * rec1 * bary.y + v2.tex_coord * rec2 * bary.z;
 
                         let shader_in = ShaderIn {
                             position: Vec3::new(position.x, position.y, position.z) * correction,
-                            normal: normal * correction,
+                            normal: Vec3::new(normal.x, normal.y, normal.z) * correction,
                             tex_coord: tex_coord * correction
                         };
 
