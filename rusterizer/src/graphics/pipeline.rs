@@ -142,16 +142,15 @@ impl Pipeline {
                         depth_buffer.set_pixel_f32(x, y, z);
 
                         // model space -> world space
-                        let mv0 = *model_matrix * Vec4::from((v0.position, 1.0)); // MUL WITH REC??
-                        let mv1 = *model_matrix * Vec4::from((v1.position, 1.0));
-                        let mv2 = *model_matrix * Vec4::from((v2.position, 1.0));
+                        let mv0 = *model_matrix * Vec4::from((v0.position * rec0, 1.0));
+                        let mv1 = *model_matrix * Vec4::from((v1.position * rec1, 1.0));
+                        let mv2 = *model_matrix * Vec4::from((v2.position * rec2, 1.0));
 
                         let correction = 1.0 / (bary.x * rec0 + bary.y * rec1 + bary.z * rec2);
 
                         let position = mv0 * bary.x + mv1 * bary.y + mv2 * bary.z;
                         let normal = v0.normal * rec0 * bary.x + v1.normal * rec1 * bary.y + v2.normal * rec2 * bary.z;
                         let tex_coord = v0.tex_coord * rec0 * bary.x + v1.tex_coord * rec1 * bary.y + v2.tex_coord * rec2 * bary.z;
-                        //let tex_coord = v0.tex_coord * bary.x + v1.tex_coord * bary.y + v2.tex_coord * bary.z;
 
                         let shader_in = ShaderIn {
                             position: Vec3::new(position.x, position.y, position.z) * correction,
@@ -165,20 +164,6 @@ impl Pipeline {
                     }
                 }
             }
-        }
-    }
-
-    fn barycentric_coordinates(point: &Vec2, v0: &Vec2, v1: &Vec2, v2: &Vec2, area: f32) -> Option<Vec3> {
-        let a = 1.0 / area;
-    
-        let m0 = Self::edge_function(point, v1, v2) * a;
-        let m1 = Self::edge_function(point, v2, v0) * a;
-        let m2 = 1.0 - m0 - m1;
-    
-        if m0 >= 0.0 && m1 >= 0.0 && m2 >= 0.0 {
-            Some(glam::vec3(m0, m1, m2))
-        } else {
-            None
         }
     }
 

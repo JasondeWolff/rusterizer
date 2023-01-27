@@ -31,13 +31,13 @@ fn main() {
 
     let mut r = 0.0;
 
-    let shader = PBRShader{};
+    let mut shader = PBRShader::default();
 
     let mut window = Window::new(String::from("Rusterizer"), 512, 512);
     while !window.should_close() {
         delta_time = delta_timer.elapsed() as f32;
         delta_timer.reset();
-        //println!("ms: {}", delta_time * 1000.0);
+        println!("ms: {}", delta_time * 1000.0);
 
         let speed = 1.0;
         if window.get_key(Key::A) {
@@ -65,7 +65,9 @@ fn main() {
 
         r += delta_time;
 
-        pipeline.set_model_matrix(Mat4::from_axis_angle(Vec3::Y, r));
+        shader.view_position = -cam_position;
+
+        pipeline.set_model_matrix(Mat4::from_axis_angle(Vec3::Y, r) * Mat4::from_axis_angle(Vec3::X, (90.0f32).to_radians()));
         pipeline.set_view_matrix(Mat4::from_translation(-cam_position));
         pipeline.set_proj_matrix(Mat4::perspective_rh((60.0f32).to_radians(), frame_buffer.aspect_ratio(), 0.01, 100.0));
 

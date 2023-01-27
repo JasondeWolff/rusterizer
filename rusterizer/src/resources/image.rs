@@ -10,8 +10,8 @@ pub struct Image {
 
 impl Image {
     pub fn get_pixel_vec3(&self, x: f32, y: f32) -> Vec3 {
-        let x = ((x * self.dimensions.x as f32) as usize).clamp(0, self.dimensions.x as usize - 1);
-        let y = ((y * self.dimensions.y as f32) as usize).clamp(0, self.dimensions.y as usize - 1);
+        let x = ((x * self.dimensions.x as f32) as usize) % (self.dimensions.x - 1) as usize;
+        let y = ((y * self.dimensions.y as f32) as usize) % (self.dimensions.y - 1) as usize;
 
         if self.channel_count == 3 {
             let data: &Vec<(u8, u8, u8)> = unsafe { std::mem::transmute(&self.data) };
