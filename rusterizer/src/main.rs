@@ -42,7 +42,7 @@ fn main() {
         let speed = 10.0;
         if window.get_key(Key::A) {
             cam_position += Vec3::X * delta_time * speed;
-        }
+        }    
         if window.get_key(Key::D) {
             cam_position -= Vec3::X * delta_time * speed;
         }
@@ -59,14 +59,17 @@ fn main() {
             cam_position += Vec3::Y * delta_time * speed;
         }
 
+        if window.get_key_down(Key::Space) {
+            shader.sample_bilinear = !shader.sample_bilinear;
+        }
+
         let mut frame_buffer = window.frame_buffer();
         frame_buffer.clear(0);
         pipeline.clear_depth();
 
-        r += delta_time;
-
         shader.view_position = -cam_position;
 
+        r += delta_time;
         pipeline.set_model_matrix(Mat4::from_axis_angle(Vec3::Y, r) * Mat4::from_axis_angle(Vec3::X, (90.0f32).to_radians()));
         pipeline.set_view_matrix(Mat4::from_translation(-cam_position));
         pipeline.set_proj_matrix(Mat4::perspective_rh((60.0f32).to_radians(), frame_buffer.aspect_ratio(), 0.01, 100.0));

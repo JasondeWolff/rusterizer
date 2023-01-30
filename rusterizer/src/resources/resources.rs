@@ -318,11 +318,11 @@ impl Resources {
                     assert!(!data.is_null(), "Failed to read image.");
                     let data: Vec<u8> = std::slice::from_raw_parts(data, (width * height * channels) as usize).to_vec();
 
-                    let resource = Shared::new(Image {
-                        data: data,
-                        dimensions: IVec2::new(width, height),
-                        channel_count: channels
-                    });
+                    let resource = Shared::new(Image::new(
+                        data,
+                        IVec2::new(width, height),
+                        channels
+                    ));
 
                     self.image_manager.insert(resource.clone(), asset_path);
                     resource

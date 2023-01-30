@@ -2,14 +2,18 @@ use crate::graphics::{Shader, ShaderIn};
 use crate::resources::Material;
 use crate::glam::*;
 
+use std::f32::consts::PI;
+
 pub struct PBRShader {
-    pub view_position: Vec3
+    pub view_position: Vec3,
+    pub sample_bilinear: bool
 }
 
 impl Default for PBRShader {
     fn default() -> Self {
         PBRShader {
-            view_position: Vec3::default()
+            view_position: Vec3::default(),
+            sample_bilinear: true
         }
     }
 }
@@ -22,47 +26,46 @@ fn lerp_v3(a: Vec3, b: Vec3, t: f32) -> Vec3 {
     a * (1.0 - t) + (b * t)
 }
 
-const PI: f32 = 3.14159265359;
 // ----------------------------------------------------------------------------
-fn DistributionGGX(N: &Vec3, H: Vec3, roughness: f32) -> f32
+fn distribution_ggx(n: &Vec3, h: Vec3, roughness: f32) -> f32
 {
     let a = roughness*roughness;
     let a2 = a*a;
-    let NdotH = N.dot(H).max(0.0);
-    let NdotH2 = NdotH*NdotH;
+    let n_dot_h = n.dot(h).max(0.0);
+    let n_dot_h2 = n_dot_h*n_dot_h;
 
     let nom   = a2;
-    let denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    let denom = n_dot_h2 * (a2 - 1.0) + 1.0;
     let denom = PI * denom * denom;
 
     nom / denom
 }
 // ----------------------------------------------------------------------------
-fn GeometrySchlickGGX(NdotV: f32, roughness:  f32) -> f32
+fn geometry_schlick_ggx(n_dot_v: f32, roughness:  f32) -> f32
 {
-    let r = (roughness + 1.0);
-    let k = (r*r) / 8.0;
+    let r = roughness + 1.0;
+    let k = (r * r) / 8.0;
 
-    let nom   = NdotV;
-    let denom = NdotV * (1.0 - k) + k;
+    let nom   = n_dot_v;
+    let denom = n_dot_v * (1.0 - k) + k;
 
     return nom / denom;
 }
 // ----------------------------------------------------------------------------
-fn GeometrySmith(N: &Vec3, V: Vec3, L: Vec3, roughness: f32) -> f32
+fn geometry_smith(n: &Vec3, v: Vec3, l: Vec3, roughness: f32) -> f32
 {
-    let NdotV = N.dot(V).max(0.0);
-    let NdotL = N.dot(L).max(0.0);
-    let ggx2 = GeometrySchlickGGX(NdotV, roughness);
-    let ggx1 = GeometrySchlickGGX(NdotL, roughness);
+    let n_dot_v = n.dot(v).max(0.0);
+    let n_dot_l = n.dot(l).max(0.0);
+    let ggx2 = geometry_schlick_ggx(n_dot_v, roughness);
+    let ggx1 = geometry_schlick_ggx(n_dot_l, roughness);
 
     return ggx1 * ggx2;
 }
 // ----------------------------------------------------------------------------
-fn fresnelSchlick(cosTheta: f32, F0: Vec3) -> Vec3
+fn fresnel_schlick(cos_theta: f32, f0: Vec3) -> Vec3
 {
     //return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-    F0 + (1.0 - F0) * (1.0 - cosTheta).clamp(0.0, 1.0).powf(5.0)
+    f0 + (1.0 - f0) * (1.0 - cos_theta).clamp(0.0, 1.0).powf(5.0)
 }
 
 impl Shader for PBRShader {
@@ -71,60 +74,60 @@ impl Shader for PBRShader {
 
         let mut base_color = material.base_color_factor.xyz();
         if let Some(base_color_texture) = material.base_color_texture.try_as_ref() {
-            base_color *= base_color_texture.get_pixel_vec3(tex_coord.x, tex_coord.y);
+            base_color *= base_color_texture.sample_pixel(tex_coord.x, tex_coord.y, self.sample_bilinear).xyz();
         }
 
-        let N = &inputs.normal;
+        let n = &inputs.normal;
 
         let mut metallic = material.metallic_factor;
         let mut roughness = material.roughness_factor;
         if let Some(metallic_roughness_texture) = material.metallic_roughness_texture.try_as_ref() {
-            let metallic_roughness = metallic_roughness_texture.get_pixel_vec3(tex_coord.x, tex_coord.y).yz();
+            let metallic_roughness = metallic_roughness_texture.sample_pixel(tex_coord.x, tex_coord.y, self.sample_bilinear).yz();
             metallic *= metallic_roughness.y;
             roughness *= metallic_roughness.x;
         }
 
         let mut occlusion = 1.0;
         if let Some(occlusion_texture) = material.occlusion_texture.try_as_ref() {
-            occlusion = lerp(occlusion_texture.get_pixel_vec3(tex_coord.x, tex_coord.y).x, 1.0, 1.0 - material.occlusion_strength);
+            occlusion = lerp(occlusion_texture.sample_pixel(tex_coord.x, tex_coord.y, self.sample_bilinear).x, 1.0, 1.0 - material.occlusion_strength);
         }
 
         let mut emission = Vec3::default();
         if let Some(emissive_texture) = material.emissive_texture.try_as_ref() {
-            emission = emissive_texture.get_pixel_vec3(tex_coord.x, tex_coord.y) * material.emissive_factor;
+            emission = emissive_texture.sample_pixel(tex_coord.x, tex_coord.y, self.sample_bilinear).xyz() * material.emissive_factor;
         }
 
-        let V = (self.view_position - inputs.position).normalize();
+        let v = (self.view_position - inputs.position).normalize();
         let ao = 0.1;
 
-        let mut F0 = Vec3::splat(0.04);
-        F0 = lerp_v3(F0, base_color, metallic);
+        let mut f0 = Vec3::splat(0.04);
+        f0 = lerp_v3(f0, base_color, metallic);
 
-        let Lo;
+        let lo;
         {
-            let L = (-Vec3::new(0.1, -1.0, 0.0)).normalize();
-            let H = (V + L).normalize();
+            let l = (-Vec3::new(0.1, -1.0, 0.0)).normalize();
+            let h = (v + l).normalize();
             let radiance = Vec3::splat(1.1);
 
-            let NDF = DistributionGGX(N, H, roughness);   
-            let G = GeometrySmith(N, V, L, roughness);      
-            let F = fresnelSchlick(H.dot(V).clamp(0.0, 1.0), F0);
+            let ndf = distribution_ggx(n, h, roughness);   
+            let g = geometry_smith(n, v, l, roughness);      
+            let f = fresnel_schlick(h.dot(v).clamp(0.0, 1.0), f0);
 
-            let numerator = NDF * G * F;
-            let denominator = 4.0 * N.dot(V).max(0.0) * N.dot(L).max(0.0) + 0.0001;
+            let numerator = ndf * g * f;
+            let denominator = 4.0 * n.dot(v).max(0.0) * n.dot(l).max(0.0) + 0.0001;
             let specular = numerator / denominator;
 
-            let kS = F;
-            let mut kD = Vec3::splat(1.0) - kS;
-            kD *= 1.0 - metallic;
+            let ks = f;
+            let mut kd = Vec3::splat(1.0) - ks;
+            kd *= 1.0 - metallic;
 
-            let NdotL = N.dot(L).max(0.0);
-            Lo = (kD * base_color / PI + specular) * radiance * NdotL;
+            let n_dot_l = n.dot(l).max(0.0);
+            lo = (kd * base_color / PI + specular) * radiance * n_dot_l;
         }
 
         let ambient = Vec3::splat(0.03) * base_color * ao;
 
-        let mut color = (ambient + Lo) * occlusion + emission;
+        let mut color = (ambient + lo) * occlusion + emission;
         color = color / (color + 1.0);
         color = color.powf(1.0 / 2.2);
 
