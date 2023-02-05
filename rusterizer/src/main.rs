@@ -21,7 +21,7 @@ fn main() {
     std::env::set_var("RUST_BACKTRACE", "1");
 
     let mut resources = Resources::init();
-    let monkey_model = resources.get_model(String::from("assets/test_models/DamagedHelmet/glTF/DamagedHelmet.gltf"));
+    let model = resources.get_model(String::from("assets/test_models/DamagedHelmet/glTF/DamagedHelmet.gltf"));
 
     let mut pipeline = Pipeline::new();
     let mut cam_position = Vec3::new(0.0, -0.03, 2.8);
@@ -74,7 +74,7 @@ fn main() {
         pipeline.set_view_matrix(Mat4::from_translation(-cam_position));
         pipeline.set_proj_matrix(Mat4::perspective_rh((60.0f32).to_radians(), frame_buffer.aspect_ratio(), 0.01, 100.0));
 
-        pipeline.draw_vertices_indexed(&shader, &monkey_model.as_ref().materials[0].as_ref(), &mut frame_buffer, &monkey_model.as_ref().meshes[0].vertices, &monkey_model.as_ref().meshes[0].indices);
+        pipeline.draw_vertices_indexed(&shader, &model.as_ref().materials[0].as_ref(), &mut frame_buffer, &model.as_ref().meshes[0].vertices, &model.as_ref().meshes[0].indices);
 
         window.display();
     }
